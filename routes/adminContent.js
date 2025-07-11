@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const GrammarLesson = require('../models/GrammarLesson');
 const Course = require('../models/Course');
+const UserProgress = require('../models/CourseProgress');
+const UserScore = require('../models/UserScore');
+const { verifyAdmin } = require('../middleware/authMiddleware');
 
 // CREATE
 router.post('/grammar', async (req, res) => {
@@ -39,6 +42,45 @@ router.delete('/grammar/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+router.get('/progress', verifyAdmin, async (req, res) => {
+  try {
+    const userProgressList = await UserProgress.find()
+    .populate('userId', 'name email')
+    .populate('courseId', 'title')
+    .lean();
+    
+    console.log("🚀 ~ router.get ~ userProgressList:", userProgressList)
+    const userScores = await UserScore.find().lean();
+
+      const validProgressList = userProgressList.filter(
+      (p) => p.userId && p.courseId
+    );
+
+    // Merge quiz and speech scores
+    const mergedData = userProgressList.map(progress => {
+      const matchingScore = userScores.find(score =>
+        String(score.userId) === String(progress.userId._id) &&
+        String(score.courseId) === String(progress.courseId._id)
+      );
+
+      return {
+        user: progress.userId,
+        course: progress.courseId,
+        completedSections: progress.completedSections,
+        currentSection: progress.currentSection,
+        quizScores: matchingScore?.quizScores || [],
+        speechScores: matchingScore?.speechScores || [],
+      };
+    });
+
+    res.status(200).json(mergedData);
+  } catch (err) {
+    console.error("Admin progress fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch student progress" });
+  }
+});
+
 
 // CREATE course
 router.post("/create", async (req, res) => {
