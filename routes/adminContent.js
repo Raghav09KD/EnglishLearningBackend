@@ -58,7 +58,7 @@ router.get('/progress', verifyAdmin, async (req, res) => {
     );
 
     // Merge quiz and speech scores
-    const mergedData = userProgressList.map(progress => {
+    const mergedData = validProgressList.map(progress => {
       const matchingScore = userScores.find(score =>
         String(score.userId) === String(progress.userId._id) &&
         String(score.courseId) === String(progress.courseId._id)
