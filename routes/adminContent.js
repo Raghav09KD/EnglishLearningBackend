@@ -18,7 +18,7 @@ router.post('/grammar', async (req, res) => {
 });
 
 // READ ALL
-router.get('/grammar',  async (req, res) => {
+router.get('/grammar', async (req, res) => {
   const lessons = await GrammarLesson.find().sort({ createdAt: -1 });
   res.json(lessons);
 });
@@ -45,19 +45,22 @@ router.delete('/grammar/:id', async (req, res) => {
 
 router.get('/progress', verifyAdmin, async (req, res) => {
   try {
-    const userProgressList = await UserProgress.find()
-    .populate('userId', 'name email')
-    .populate('courseId', 'title')
-    .lean();
-    
-    console.log("🚀 ~ router.get ~ userProgressList:", userProgressList)
-    const userScores = await UserScore.find().lean();
+    const { userId } = req.query;
 
-      const validProgressList = userProgressList.filter(
+    const userProgressQuery = userId ? { userId } : {};
+
+    const userProgressList = await UserProgress.find(userProgressQuery)
+      .populate('userId', 'name email')
+      .populate('courseId', 'title')
+      .lean();
+
+    const userScoresQuery = userId ? { userId } : {};
+    const userScores = await UserScore.find(userScoresQuery).lean();
+
+    const validProgressList = userProgressList.filter(
       (p) => p.userId && p.courseId
     );
 
-    // Merge quiz and speech scores
     const mergedData = validProgressList.map(progress => {
       const matchingScore = userScores.find(score =>
         String(score.userId) === String(progress.userId._id) &&

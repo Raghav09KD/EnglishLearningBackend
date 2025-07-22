@@ -9,7 +9,7 @@ const UserScore = require('../models/UserScore');
 // CREATE course 
 router.post('/create', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, sections, adminId } = req.body;
+    const { title, description, sections } = req.body;
     const course = new Course({
       title,
       description,
@@ -22,6 +22,8 @@ router.post('/create', verifyAdmin, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 
 router.post('/updateProgress', verifyToken, async (req, res) => {
   try {
@@ -138,8 +140,11 @@ router.post('/updateProgress', verifyToken, async (req, res) => {
 router.get("/getCources", verifyToken, async (req, res) => {
   try {
     const userId = req.user.id;
+    const role = req.user;
+    console.log("🚀 ~ router.get ~ role:", role)
 
-    const courses = await Course.find().sort({ createdAt: -1 });
+    const courseFilter = req.user.role === 'admin' ? {} : { isActive: true };
+    const courses = await Course.find(courseFilter).sort({ createdAt: -1 });
 
     const progressData = await UserProgress.find({ userId });
 
@@ -158,6 +163,7 @@ router.get("/getCources", verifyToken, async (req, res) => {
         _id: course._id,
         title: course.title,
         createdAt: course.createdAt,
+        isActive: course.isActive,
         completedCount,
         totalCount,
         percentage
@@ -171,7 +177,29 @@ router.get("/getCources", verifyToken, async (req, res) => {
   }
 });
 
+router.put('/update/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { title, description, sections } = req.body;
+    const courseId = req.params.id;
 
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    course.title = title || course.title;
+    course.description = description || course.description;
+    course.sections = sections || course.sections;
+    course.updatedAt = new Date();
+
+    await course.save();
+
+    res.status(200).json({ message: "Course updated successfully", course });
+  } catch (err) {
+    console.error("Error updating course:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/getCourse/:id", verifyToken, async (req, res) => {
   try {

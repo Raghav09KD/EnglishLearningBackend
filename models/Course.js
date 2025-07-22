@@ -20,6 +20,7 @@ const courseSchema = new mongoose.Schema({
   description: String,
   sections: [sectionSchema],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });
 
