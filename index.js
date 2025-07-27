@@ -18,6 +18,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminContentRoutes);
 app.use('/api/courses', coursesRoutes);
 app.use('/api/speechPractise', speechPracticeRoutes);
+
+app.use('/api/courseComments', require('./routes/CourseComments'));
 app.use('/api/vocabulary', require('./routes/vocabulary'));
 app.use('/api/stories', require('./routes/stories'));
 app.use('/api/pronunciation', require('./routes/pronunciation'));

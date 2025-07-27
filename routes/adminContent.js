@@ -4,7 +4,7 @@ const GrammarLesson = require('../models/GrammarLesson');
 const Course = require('../models/Course');
 const UserProgress = require('../models/CourseProgress');
 const UserScore = require('../models/UserScore');
-const { verifyAdmin } = require('../middleware/authMiddleware');
+const { verifyAdmin, verifyToken } = require('../middleware/authMiddleware');
 
 // CREATE
 router.post('/grammar', async (req, res) => {
@@ -43,10 +43,16 @@ router.delete('/grammar/:id', async (req, res) => {
   }
 });
 
-router.get('/progress', verifyAdmin, async (req, res) => {
+router.get('/progress', verifyToken, async (req, res) => {
   try {
     const { userId } = req.query;
 
+    let fetchUserId
+    if(req.user.role === 'admin') {
+      fetchUserId = userId // Admin can fetch any user or their own
+    }else{
+      fetchUserId = req.user.id // Regular users can only fetch their own progress
+    }
     const userProgressQuery = userId ? { userId } : {};
 
     const userProgressList = await UserProgress.find(userProgressQuery)

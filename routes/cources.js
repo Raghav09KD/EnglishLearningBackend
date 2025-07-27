@@ -76,7 +76,7 @@ router.post('/updateProgress', verifyToken, async (req, res) => {
       const totalQuestions = quizResults.length;
       const correctAnswers = quizResults.filter(r => r.isCorrect).length;
       const score = Math.round((correctAnswers / totalQuestions) * 100);
-
+      console.log("🚀 ~ score:", score)
       // Upsert score
       await UserScore.findOneAndUpdate(
         { userId, courseId },
@@ -124,6 +124,9 @@ router.post('/updateProgress', verifyToken, async (req, res) => {
     }
 
     await progress.save();
+
+    // 🏅 Check if course is completed, assign medal
+    await assignMedalIfCompleted(userId, course);
 
     res.status(200).json({
       message: 'Progress updated',
@@ -290,6 +293,60 @@ router.get('/getCourse/:courseId/section/:sectionIndex', verifyToken, async (req
     res.status(500).json({ error: 'Error fetching section' });
   }
 });
+
+
+const assignMedalIfCompleted = async (userId, course) => {
+  const totalSections = course.sections.length;
+
+  const userProgress = await UserProgress.findOne({ userId, courseId: course._id });
+
+  if (!userProgress || userProgress.completedSections.length < totalSections) {
+    return; // Not all sections completed yet
+  }
+
+  const userScore = await UserScore.findOne({ userId, courseId: course._id });
+  if (!userScore) return;
+
+  // If medal already assigned, skip
+  if (userScore.medal && userScore.medal !== 'none') return;
+
+  // Calculate average score
+  const quizScores = userScore.quizScores || [];
+  const speechScores = userScore.speechScores || [];
+
+  let totalQuizScore = 0;
+  let totalQuizMax = 0;
+
+  quizScores.forEach(q => {
+    totalQuizScore += q.score;
+    totalQuizMax += 100;
+  });
+
+  let totalSpeechScore = 0;
+  let totalSpeechMax = 0;
+
+  speechScores.forEach(s => {
+    totalSpeechScore += s.score;
+    totalSpeechMax += 100;
+  });
+
+  const quizPercent = totalQuizMax ? (totalQuizScore / totalQuizMax) * 100 : 0;
+  console.log("🚀 ~ assignMedalIfCompleted ~ quizPercent:", quizPercent)
+  // const speechPercent = totalSpeechMax ? (totalSpeechScore / totalSpeechMax) * 100 : 0;
+  // console.log("🚀 ~ assignMedalIfCompleted ~ speechPercent:", speechPercent)
+  // const avg = (quizPercent + speechPercent) / 2;
+  // console.log("🚀 ~ assignMedalIfCompleted ~ avg:", avg)
+
+  let medal = 'none';
+  if (quizPercent >= 90) medal = 'gold';
+  else if (quizPercent >= 75) medal = 'silver';
+  else if (quizPercent >= 50) medal = 'bronze';
+
+  userScore.medal = medal;
+  await userScore.save();
+
+  console.log(`🥇 Medal assigned to user ${userId}: ${medal}`);
+};
 
 
 

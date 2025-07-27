@@ -5,6 +5,12 @@ const userScoreSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
 
+  medal: {
+    type: String,
+    enum: ['gold', 'silver', 'bronze', 'none'],
+    default: 'none'
+  },
+
   quizScores: [
     {
       sectionIndex: Number,

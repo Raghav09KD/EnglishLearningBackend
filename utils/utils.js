@@ -41,3 +41,31 @@ export function calculatePronunciationScore(expectedText, spokenText) {
     mistakes,
   };
 }
+
+function calculateMedal(quizScores = [], speechScores = []) {
+  let totalQuizScore = 0;
+  let totalQuizMax = 0;
+
+  quizScores.forEach((q) => {
+    totalQuizScore += q.score;
+    totalQuizMax += 100;
+  });
+
+  let totalSpeechScore = 0;
+  let totalSpeechMax = 0;
+
+  speechScores.forEach((s) => {
+    totalSpeechScore += s.score;
+    totalSpeechMax += 100;
+  });
+
+  const quizPercent = totalQuizMax ? (totalQuizScore / totalQuizMax) * 100 : 0;
+  const speechPercent = totalSpeechMax ? (totalSpeechScore / totalSpeechMax) * 100 : 0;
+
+  const avgScore = (quizPercent + speechPercent) / 2;
+
+  if (avgScore >= 90) return 'gold';
+  if (avgScore >= 75) return 'silver';
+  if (avgScore >= 50) return 'bronze';
+  return 'none';
+}
