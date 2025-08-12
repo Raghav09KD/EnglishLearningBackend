@@ -73,11 +73,13 @@ router.get('/progress', verifyToken, async (req, res) => {
         String(score.courseId) === String(progress.courseId._id)
       );
 
+        console.log("🚀 ~ progress:", progress)
       return {
         user: progress.userId,
         course: progress.courseId,
         completedSections: progress.completedSections,
         currentSection: progress.currentSection,
+        medal : matchingScore?.medal || 'none',
         quizScores: matchingScore?.quizScores || [],
         // speechScores: speechScore,
         
