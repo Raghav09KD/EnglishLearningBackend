@@ -48,9 +48,9 @@ router.get('/progress', verifyToken, async (req, res) => {
     const { userId } = req.query;
 
     let fetchUserId
-    if(req.user.role === 'admin') {
+    if (req.user.role === 'admin') {
       fetchUserId = userId // Admin can fetch any user or their own
-    }else{
+    } else {
       fetchUserId = req.user.id // Regular users can only fetch their own progress
     }
     const userProgressQuery = userId ? { userId } : {};
@@ -79,7 +79,8 @@ router.get('/progress', verifyToken, async (req, res) => {
         completedSections: progress.completedSections,
         currentSection: progress.currentSection,
         quizScores: matchingScore?.quizScores || [],
-        speechScores: matchingScore?.speechScores || [],
+        // speechScores: speechScore,
+        
       };
     });
 

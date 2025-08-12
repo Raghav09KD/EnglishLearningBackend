@@ -5,19 +5,21 @@ const userRoutes = require('./routes/users');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
-const adminContentRoutes = require('./routes/adminContent');
 const coursesRoutes = require('./routes/cources');
+const adminContentRoutes = require('./routes/adminContent');
 const speechPracticeRoutes = require('./routes/SpeechPratise');
+const voicePractiseRoututes = require('./routes/voiceCourseRoute');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use('/api/user',userRoutes )
+app.use('/api/user', userRoutes)
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminContentRoutes);
 app.use('/api/courses', coursesRoutes);
 app.use('/api/speechPractise', speechPracticeRoutes);
+app.use('/api/voicePractise', voicePractiseRoututes)
 
 app.use('/api/courseComments', require('./routes/CourseComments'));
 app.use('/api/vocabulary', require('./routes/vocabulary'));
