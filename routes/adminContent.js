@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const GrammarLesson = require('../models/GrammarLesson');
 const Course = require('../models/Course');
+const UserProgress = require('../models/CourseProgress');
+const UserScore = require('../models/UserScore');
+const { verifyAdmin, verifyToken } = require('../middleware/authMiddleware');
 
 // CREATE
 router.post('/grammar', async (req, res) => {
@@ -15,7 +17,7 @@ router.post('/grammar', async (req, res) => {
 });
 
 // READ ALL
-router.get('/grammar',  async (req, res) => {
+router.get('/grammar', async (req, res) => {
   const lessons = await GrammarLesson.find().sort({ createdAt: -1 });
   res.json(lessons);
 });
@@ -39,6 +41,57 @@ router.delete('/grammar/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+router.get('/progress', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    let fetchUserId
+    if (req.user.role === 'admin') {
+      fetchUserId = userId // Admin can fetch any user or their own
+    } else {
+      fetchUserId = req.user.id // Regular users can only fetch their own progress
+    }
+    const userProgressQuery = userId ? { userId } : {};
+
+    const userProgressList = await UserProgress.find(userProgressQuery)
+      .populate('userId', 'name email')
+      .populate('courseId', 'title')
+      .lean();
+
+    const userScoresQuery = userId ? { userId } : {};
+    const userScores = await UserScore.find(userScoresQuery).lean();
+
+    const validProgressList = userProgressList.filter(
+      (p) => p.userId && p.courseId
+    );
+
+    const mergedData = validProgressList.map(progress => {
+      const matchingScore = userScores.find(score =>
+        String(score.userId) === String(progress.userId._id) &&
+        String(score.courseId) === String(progress.courseId._id)
+      );
+
+        console.log("🚀 ~ progress:", progress)
+      return {
+        user: progress.userId,
+        course: progress.courseId,
+        completedSections: progress.completedSections,
+        currentSection: progress.currentSection,
+        medal : matchingScore?.medal || 'none',
+        quizScores: matchingScore?.quizScores || [],
+        // speechScores: speechScore,
+        
+      };
+    });
+
+    res.status(200).json(mergedData);
+  } catch (err) {
+    console.error("Admin progress fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch student progress" });
+  }
+});
+
 
 // CREATE course
 router.post("/create", async (req, res) => {
