@@ -10,11 +10,12 @@ const UserScore = require('../models/UserScore');
 // CREATE course 
 router.post('/create', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, sections } = req.body;
+    const { title, description, sections, level } = req.body;
     const course = new Course({
       title,
       description,
       sections: sections,
+      level,
       createdBy: req.user.id,
     });
     await course.save();
@@ -146,8 +147,15 @@ router.get("/getCources", verifyToken, async (req, res) => {
     const userId = req.user.id;
     const role = req.user;
     console.log("🚀 ~ router.get ~ role:", role)
+    const { level } = req.query; // read ?level=easy
 
     const courseFilter = req.user.role === 'admin' ? {} : { isActive: true };
+
+    // Add level filter if provided
+    if (level) {
+      courseFilter.level = level.toLowerCase();
+    }
+
     const courses = await Course.find(courseFilter).sort({ createdAt: -1 });
 
     const progressData = await UserProgress.find({ userId });
@@ -166,6 +174,7 @@ router.get("/getCources", verifyToken, async (req, res) => {
       return {
         _id: course._id,
         title: course.title,
+        level: course.level, // include level in response
         createdAt: course.createdAt,
         isActive: course.isActive,
         completedCount,
@@ -183,7 +192,7 @@ router.get("/getCources", verifyToken, async (req, res) => {
 
 router.put('/update/:id', verifyAdmin, async (req, res) => {
   try {
-    const { title, description, sections, isActive  } = req.body;
+    const { title, description, sections, isActive, level } = req.body;
     const courseId = req.params.id;
 
     const course = await Course.findById(courseId);
@@ -194,8 +203,9 @@ router.put('/update/:id', verifyAdmin, async (req, res) => {
     course.title = title || course.title;
     course.description = description || course.description;
     course.sections = sections || course.sections;
+    if (level) course.level = level;
     if (typeof isActive === 'boolean') {
-      course.isActive = isActive;  
+      course.isActive = isActive;
     }
     course.updatedAt = new Date();
 

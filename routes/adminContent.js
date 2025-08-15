@@ -96,11 +96,12 @@ router.get('/progress', verifyToken, async (req, res) => {
 // CREATE course
 router.post("/create", async (req, res) => {
   try {
-    const { title, description, sections, adminId } = req.body;
+    const { title, description, sections, adminId, level } = req.body;
 
     const course = new Course({
       title,
       description,
+      level,
       sections,
       createdBy: adminId,
     });

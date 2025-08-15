@@ -18,6 +18,11 @@ const sectionSchema = new mongoose.Schema({
 const courseSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: String,
+  level: { 
+    type: String, 
+    enum: ["easy", "medium", "hard"], 
+    required: true 
+  },
   sections: [sectionSchema],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   isActive: { type: Boolean, default: true },
