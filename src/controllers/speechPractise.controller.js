@@ -1,0 +1,139 @@
+const SpeechPractice = require('../models/SpeechPractise');
+const SpeechScore = require('../models/SpeechScore');
+const { calculatePronunciationScore } = require('../utils/utils');
+const mongoose = require('mongoose');
+
+exports.createSpeechPractice = async (req, res) => {
+  try {
+    const { title, text, courseId } = req.body;
+    const newPractice = await SpeechPractice.create({
+      title,
+      text,
+      courseId,
+      createdBy: req.user.id,
+    });
+    res.status(201).json({ message: 'Speech practice created', data: newPractice });
+  } catch (err) {
+    console.error('Create error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.getAllSpeechPractices = async (req, res) => {
+  try {
+    const speechTexts = await SpeechPractice.find()
+      .sort({ createdAt: -1 })
+      .select('title text courseId createdAt isActive');
+    res.status(200).json(speechTexts);
+  } catch (err) {
+    console.error("Fetch speech texts error:", err);
+    res.status(500).json({ error: 'Failed to fetch speech practices' });
+  }
+};
+
+exports.scoreSpeech = async (req, res) => {
+  try {
+    const { id, expectedText, spokenText } = req.body;
+    const userId = req.user.id;
+
+    if (!expectedText || !spokenText) {
+      return res.status(400).json({ error: 'Missing expected or spoken text' });
+    }
+
+    const result = calculatePronunciationScore(expectedText, spokenText);
+
+    const speechScore = new SpeechScore({
+      speechPractId: id,
+      userId,
+      expectedText,
+      spokenText,
+      score: result.score,
+      totalWords: result.totalExpected,
+      correctWords: result.correct,
+      createdAt: new Date()
+    });
+
+    await speechScore.save();
+    res.status(200).json({ message: 'Speech score saved', result });
+  } catch (err) {
+    console.error('Speech scoring error:', err);
+    res.status(500).json({ error: 'Failed to score speech' });
+  }
+};
+
+exports.toggleSpeech = async (req, res) => {
+  const { speechPractId } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(speechPractId)) {
+    return res.status(400).json({ error: "Invalid speech ID" });
+  }
+
+  try {
+    const exercise = await SpeechPractice.findById(speechPractId);
+    if (!exercise) return res.status(404).json({ error: "Exercise not found" });
+
+    const updatedExercise = await SpeechPractice.findByIdAndUpdate(
+      speechPractId,
+      { $set: { isActive: !exercise.isActive } },
+      { new: true }
+    );
+
+    res.status(200).json({
+      message: `Exercise ${updatedExercise.title} is now ${updatedExercise.isActive ? "active" : "inactive"}.`,
+      exercise: updatedExercise,
+    });
+  } catch (err) {
+    console.error("Toggle exercise error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+exports.updateSpeechPractice = async (req, res) => {
+  const { id, title, text } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "Invalid speech ID" });
+  }
+
+  try {
+    const exercise = await SpeechPractice.findById(id);
+    if (!exercise) {
+      return res.status(404).json({ error: "Exercise not found" });
+    }
+
+    const updatedExercise = await SpeechPractice.findByIdAndUpdate(
+      id,
+      { $set: { title: title || exercise.title, text: text || exercise.text } },
+      { new: true }
+    );
+
+    res.status(200).json(updatedExercise);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getSpeechProgress = async (req, res) => {
+  const requestedUserId = req.query.userId;
+
+  try {
+    let filter = {};
+    if (req.user.role !== 'admin') {
+      filter.userId = req.user.id;
+    } else if (requestedUserId) {
+      if (!mongoose.Types.ObjectId.isValid(requestedUserId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+      filter.userId = requestedUserId;
+    }
+
+    const scores = await SpeechScore.find(filter)
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(scores);
+  } catch (err) {
+    console.error("Error fetching speech progress:", err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
