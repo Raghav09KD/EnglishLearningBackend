@@ -172,15 +172,8 @@ exports.getSpeechProgressForUsr = async (req, res) => {
   const { userId } = req.body;
 
   try {
-    let filter = {};
-    if (req.user.role !== 'admin') {
-      filter.userId = req.user.id;
-    } else if (userId) {
-      if (!mongoose.Types.ObjectId.isValid(userId)) {
-        return res.status(400).json({ error: 'Invalid user ID' });
-      }
-      filter.userId = userId;
-    }
+    let filter = { userId: userId };
+  
 
     const scores = await SpeechScore.find(filter)
       .populate('userId', 'name email')

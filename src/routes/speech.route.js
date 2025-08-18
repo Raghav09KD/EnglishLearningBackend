@@ -10,7 +10,7 @@ router.post('/score', verifyToken, speechController.scoreSpeech);
 router.patch('/toggleSpeech', verifyTecherNAdmin, speechController.toggleSpeech);
 router.put('/update', verifyTecherNAdmin, speechController.updateSpeechPractice);
 router.get('/progress', verifyToken, speechController.getSpeechProgress);
-router.post('/getProgressForUsr', verifyToken, speechController.getSpeechProgressForUsr);
+router.post('/getProgressForUsr', verifyTecherNAdmin, speechController.getSpeechProgressForUsr);
 
 
 module.exports = router;    
