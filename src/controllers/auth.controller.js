@@ -4,8 +4,65 @@ const Teacher = require('../models/Teacher'); // assuming this exists
 const Course = require('../models/Course'); // assuming this exists
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const express = require('express');
 
 const sendOTPEmail = require('../utils/sendVerificationEmail');
+
+const router = express.Router();
+
+
+// Forgot Password Logic
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Generate reset token (expires in 1 hour)
+    const resetToken = jwt.sign({ userId: user._id }, process.env.RESET_PASSWORD_SECRET, { expiresIn: '1h' });
+
+    // Create reset link
+    const resetLink = `http://localhost:3000/reset-password/${resetToken}`;  // Make sure this matches your frontend route
+
+    // Send the reset link via email
+    await sendOTPEmail(user.email, null, resetLink);
+
+    res.status(200).json({ message: 'Password reset link has been sent to your email.' });
+  } catch (err) {
+    console.error("Error during password reset:", err);  // Logging the error
+    res.status(500).json({ message: 'Something went wrong. Please try again.' });
+  }
+};
+
+
+// Reset Password Logic
+exports.resetPassword = async (req, res) => {
+  const { token, password } = req.body;
+
+  try {
+    // Verify the reset token
+    const decoded = jwt.verify(token, process.env.RESET_PASSWORD_SECRET);
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Update user's password
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: 'Password reset successfully.' });
+  } catch (err) {
+    console.error("Error during password reset:", err);  // Logging error
+    res.status(400).json({ message: 'Invalid or expired reset token' });
+  }
+};
+
 
 
 exports.register = async (req, res, next) => {
