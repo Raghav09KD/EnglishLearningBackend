@@ -56,6 +56,7 @@ exports.register = async (req, res, next) => {
   }
 };
 
+
 // POST /api/auth/verify-otp
 exports.verifyOTP = async (req, res) => {
   const { email, otp } = req.body;
@@ -118,7 +119,7 @@ exports.login = async (req, res, next) => {
 
     // ✅ Email verification check ONLY for student & teacher
     if ((role === "student" || role === "teacher") && !user?.emailVerified) {
-      
+
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
       const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
 
@@ -155,6 +156,58 @@ exports.login = async (req, res, next) => {
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+exports.adminSignUp = async (req, res) => {
+  try {
+    const { name, email, password, confirmPassword, superPassword } = req.body;
+
+
+    if (superPassword !== process.env.SUPER_ADMIN_SECRET) {
+      return res.status(403).json({ error: "Invalid super password" });
+    }
+
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: "Passwords do not match" });
+    }
+
+
+    const existingUser = await Admin.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+
+    const newAdmin = new Admin({
+      name,
+      email,
+      password: hashedPassword,
+      role: "admin", // force role as admin
+    });
+
+    await newAdmin.save();
+
+
+    const token = jwt.sign(
+      { userId: newAdmin._id, role: newAdmin.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }
+    );
+
+    res.status(201).json({
+      message: "Admin registered successfully",
+      token,
+      user: { id: newAdmin._id, name: newAdmin.name, email: newAdmin.email, role: newAdmin.role },
+    });
+  } catch (error) {
+    console.error("Admin signup error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 

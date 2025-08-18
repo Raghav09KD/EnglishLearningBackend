@@ -16,6 +16,7 @@ const voiceCourseSchema = new mongoose.Schema({
   quiz: { type: [voiceQuizSchema], default: [] },
   isActive: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  isGlobal: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

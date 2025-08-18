@@ -8,6 +8,7 @@ const SpeechPracticeSchema = new mongoose.Schema({
   courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
   isActive: { type: Boolean, default: true },
+  isGlobal: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 

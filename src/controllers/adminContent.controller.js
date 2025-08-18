@@ -95,11 +95,30 @@ exports.updateCourse = async (req, res) => {
 
 exports.fetchAll = async (req, res) => {
   try {
-    const users = await User.find({}, '-password'); // exclude passwords
+    const currentUser = req.user; // set by auth middleware
+    console.log(currentUser)
+    let users;
+
+    if (currentUser.role === "admin") {
+      // Admin -> fetch all users
+      users = await User.find({}, "-password");
+    } else if (currentUser.role === "teacher") {
+      // Teacher -> fetch only their students
+      const teacher = await User.findById(currentUser.id).populate("students", "-password");
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      users = teacher.students; // already populated
+    } else {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
     res.json(users);
   } catch (error) {
     console.error("Error fetching users:", error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 

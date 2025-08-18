@@ -21,6 +21,8 @@ exports.createCourse = async (req, res) => {
       title,
       mp3File: `uploads/mp3/${req.file.filename}`,
       quiz: parsedQuiz,
+      isGlobal: req.user.role === "admin" ? true : false,
+
       createdBy: req.user.id
     });
 
@@ -50,8 +52,13 @@ exports.getAllCourses = async (req, res) => {
     // Feature flag restrictions
     if (featureFlags.teacherCourseRestriction) {
       if (user?.role === "student") {
-        courseFilter.createdBy = user?.teacher;
-        courseFilter.isActive = true;
+        courseFilter = {
+          isActive: true,
+          $or: [
+            { createdBy: user?.teacher }, // student’s teacher courses
+            { isGlobal: true }            // global courses
+          ]
+        };
       } else if (user?.role === "teacher") {
         courseFilter.createdBy = userId;
       }
@@ -179,6 +186,48 @@ exports.viewProgress = async (req, res) => {
   try {
     // Fetch all progress records of the user
     const progress = await UserVoiceCourseProgress.find({ userId: req.user.id })
+      .lean();
+
+    if (!progress.length) {
+      return res.status(404).json({ error: "No progress found" });
+    }
+
+    // Collect all courseIds from progress
+    const courseIds = progress.map(p => p.courseId);
+
+    // Fetch course details in one go
+    const courses = await VoiceCourse.find({ _id: { $in: courseIds } })
+      .select("title quiz") // only return title & quiz
+      .lean();
+
+    // Map courseId → course details
+    const courseMap = {};
+    courses.forEach(c => {
+      courseMap[c._id.toString()] = c;
+    });
+
+    // Attach course info to each progress
+    const result = progress.map(p => ({
+      ...p,
+      courseTitle: courseMap[p.courseId.toString()]?.title || "Untitled",
+      quiz: courseMap[p.courseId.toString()]?.quiz || [],
+    }));
+
+    res.status(200).json(result);
+
+  } catch (err) {
+    console.error("Error fetching progress:", err);
+    res.status(500).json({ error: "Failed to fetch progress data" });
+  }
+};
+
+// View progress
+// View progress
+exports.viewProgressForUsr = async (req, res) => {
+  try {
+    const { userId } = req.body
+    // Fetch all progress records of the user
+    const progress = await UserVoiceCourseProgress.find({ userId: userId })
       .lean();
 
     if (!progress.length) {

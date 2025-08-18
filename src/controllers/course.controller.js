@@ -10,12 +10,14 @@ const featureFlags = require('../config/featureFlags')
 exports.createCourse = async (req, res) => {
   try {
     const { title, description, sections } = req.body;
+
     console.log(req.user.role)
     const course = new Course({
       title,
       description,
       sections,
       createdBy: req.user.id,
+      isGlobal: req.user.role === "admin" ? true : false,
     });
     await course.save();
     res.status(201).json(course);
@@ -58,8 +60,13 @@ exports.getCourses = async (req, res) => {
     let user = await User.findOne({ _id: userId });
     // Student: only active courses
     if (user?.role === "student" && featureFlags.teacherCourseRestriction) {
-      courseFilter.isActive = true;
-      courseFilter.createdBy = user?.teacher
+      courseFilter = {
+        isActive: true,
+        $or: [
+          { createdBy: user?.teacher }, // student’s teacher courses
+          { isGlobal: true }            // global courses
+        ]
+      };
     }
 
     // Teacher: restrict if feature flag is ON

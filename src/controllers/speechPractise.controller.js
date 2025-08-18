@@ -13,6 +13,7 @@ exports.createSpeechPractice = async (req, res) => {
       text,
       courseId,
       createdBy: req.user.id,
+      isGlobal: req.user.role === "admin" ? true : false,
     });
     res.status(201).json({ message: 'Speech practice created', data: newPractice });
   } catch (err) {
@@ -36,7 +37,13 @@ exports.getAllSpeechPractices = async (req, res) => {
     // Feature flag restricts ownership
     if (featureFlags.teacherCourseRestriction) {
       if (user?.role === "student") {
-        courseFilter.createdBy = user?.teacher;   // student's teacher
+        courseFilter = {
+          isActive: true,
+          $or: [
+            { createdBy: user?.teacher }, // student’s teacher courses
+            { isGlobal: true }            // global courses
+          ]
+        };   // student's teacher
       } else if (user?.role === "teacher") {
         courseFilter.createdBy = userId;          // teacher’s own
       }
@@ -148,6 +155,31 @@ exports.getSpeechProgress = async (req, res) => {
         return res.status(400).json({ error: 'Invalid user ID' });
       }
       filter.userId = requestedUserId;
+    }
+
+    const scores = await SpeechScore.find(filter)
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(scores);
+  } catch (err) {
+    console.error("Error fetching speech progress:", err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.getSpeechProgressForUsr = async (req, res) => {
+  const { userId } = req.body;
+
+  try {
+    let filter = {};
+    if (req.user.role !== 'admin') {
+      filter.userId = req.user.id;
+    } else if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+      filter.userId = userId;
     }
 
     const scores = await SpeechScore.find(filter)

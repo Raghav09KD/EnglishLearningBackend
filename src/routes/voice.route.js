@@ -10,4 +10,6 @@ router.post("/updateProgress", verifyToken, voiceCourseController.updateProgress
 router.get("/getDetails/:id", verifyToken, voiceCourseController.getCourseDetails);
 router.get("/viewProgress", verifyToken, voiceCourseController.viewProgress);
 
+router.post('/viewProgressForUsr', verifyTecherNAdmin , voiceCourseController.viewProgressForUsr)
+
 module.exports = router;
