@@ -2,7 +2,8 @@ const path = require("path");
 const fs = require("fs");
 const VoiceCourse = require("../models/VoiceCourse");
 const UserVoiceCourseProgress = require("../models/VoiceProgress");
-
+const User = require("../models/User");
+const featureFlags = require('../config/featureFlags')
 // Create Voice Course
 exports.createCourse = async (req, res) => {
   try {
@@ -36,36 +37,87 @@ exports.createCourse = async (req, res) => {
 // Get all voice courses
 exports.getAllCourses = async (req, res) => {
   try {
-    const courseFilter = req.user.role === "admin" ? {} : { isActive: true };
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    let courseFilter = {};
+
+    // Students see only active
+    if (user?.role === "student") {
+      courseFilter.isActive = true;
+    }
+
+    // Feature flag restrictions
+    if (featureFlags.teacherCourseRestriction) {
+      if (user?.role === "student") {
+        courseFilter.createdBy = user?.teacher;
+        courseFilter.isActive = true;
+      } else if (user?.role === "teacher") {
+        courseFilter.createdBy = userId;
+      }
+    }
+
+    // Admin sees all
+    if (req.user.role === "admin") {
+      courseFilter = {};
+    }
+
+    // Fetch courses
     const courses = await VoiceCourse.find(courseFilter).select("title");
-    res.status(200).json(courses);
+
+    // Fetch user progress for all these courses
+    const courseIds = courses.map(c => c._id);
+    const progress = await UserVoiceCourseProgress.find({
+      userId,
+      courseId: { $in: courseIds }
+    }).select("courseId");
+
+    const completedCourseIds = new Set(progress.map(p => p.courseId.toString()));
+
+    // Attach completion flag
+    const result = courses.map(course => ({
+      _id: course._id,
+      title: course.title,
+      isCompleted: completedCourseIds.has(course._id.toString())
+    }));
+
+    res.status(200).json(result);
   } catch (err) {
     console.error("Error fetching voice courses:", err);
     res.status(500).json({ error: "Failed to fetch voice courses" });
   }
 };
 
+
 // Update Progress
 exports.updateProgress = async (req, res) => {
   try {
     const { id, submitedAnswers } = req.body;
 
-    const existing = await UserVoiceCourseProgress.findOne({ userId: req.user.id, courseId: id });
+    const existing = await UserVoiceCourseProgress.findOne({
+      userId: req.user.id,
+      courseId: id,
+    });
     if (existing) {
-      return res.status(400).json({ error: "Course already completed", progress: existing });
+      return res
+        .status(400)
+        .json({ error: "Course already completed", progress: existing });
     }
 
     const course = await VoiceCourse.findById(id).lean();
     if (!course) return res.status(404).json({ error: "Course not found" });
 
     const adjustedAnswers = {};
-    Object.keys(submitedAnswers).forEach(key => {
-      adjustedAnswers[key] = submitedAnswers[key] + 1;
+    Object.keys(submitedAnswers).forEach((key) => {
+      adjustedAnswers[key] = submitedAnswers[key] + 1; // shift index
     });
 
     let score = 0;
+    const correctAnswers = {};
+
     if (course.quiz?.length) {
       course.quiz.forEach((q, idx) => {
+        correctAnswers[idx] = q.correctAnswer; // ✅ store correct answer
         if (adjustedAnswers[idx] === q.correctAnswer) score++;
       });
     }
@@ -83,16 +135,16 @@ exports.updateProgress = async (req, res) => {
       submittedAnswers: adjustedAnswers,
       score,
       medal,
-      totalQuestions: course.quiz.length
+      totalQuestions: course.quiz.length,
     });
 
     res.status(200).json({
       message: "Progress updated successfully",
       score,
       totalQuestions: course.quiz.length,
-      progress
+      correctAnswers, // ✅ send correct answers back
+      progress,
     });
-
   } catch (err) {
     console.error("Error updating progress:", err);
     res.status(500).json({ error: "Failed to update progress" });
@@ -122,11 +174,40 @@ exports.getCourseDetails = async (req, res) => {
 };
 
 // View progress
+// View progress
 exports.viewProgress = async (req, res) => {
   try {
-    const progress = await UserVoiceCourseProgress.find({ userId: req.user.id });
-    if (!progress.length) return res.status(404).json({ error: "No progress found" });
-    res.status(200).json(progress);
+    // Fetch all progress records of the user
+    const progress = await UserVoiceCourseProgress.find({ userId: req.user.id })
+      .lean();
+
+    if (!progress.length) {
+      return res.status(404).json({ error: "No progress found" });
+    }
+
+    // Collect all courseIds from progress
+    const courseIds = progress.map(p => p.courseId);
+
+    // Fetch course details in one go
+    const courses = await VoiceCourse.find({ _id: { $in: courseIds } })
+      .select("title quiz") // only return title & quiz
+      .lean();
+
+    // Map courseId → course details
+    const courseMap = {};
+    courses.forEach(c => {
+      courseMap[c._id.toString()] = c;
+    });
+
+    // Attach course info to each progress
+    const result = progress.map(p => ({
+      ...p,
+      courseTitle: courseMap[p.courseId.toString()]?.title || "Untitled",
+      quiz: courseMap[p.courseId.toString()]?.quiz || [],
+    }));
+
+    res.status(200).json(result);
+
   } catch (err) {
     console.error("Error fetching progress:", err);
     res.status(500).json({ error: "Failed to fetch progress data" });

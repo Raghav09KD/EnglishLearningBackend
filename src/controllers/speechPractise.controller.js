@@ -1,7 +1,9 @@
 const SpeechPractice = require('../models/SpeechPractise');
 const SpeechScore = require('../models/SpeechScore');
+const User = require('../models/User');
 const { calculatePronunciationScore } = require('../utils/utils');
 const mongoose = require('mongoose');
+const featureFlags = require('../config/featureFlags')
 
 exports.createSpeechPractice = async (req, res) => {
   try {
@@ -21,9 +23,30 @@ exports.createSpeechPractice = async (req, res) => {
 
 exports.getAllSpeechPractices = async (req, res) => {
   try {
-    const speechTexts = await SpeechPractice.find()
+    const userId = req.user.id; // define this for later use
+    const user = await User.findById(userId);
+
+    let courseFilter = {};
+
+    // Students always only see active speech practices
+    if (user?.role === "student") {
+      courseFilter.isActive = true;
+    }
+
+    // Feature flag restricts ownership
+    if (featureFlags.teacherCourseRestriction) {
+      if (user?.role === "student") {
+        courseFilter.createdBy = user?.teacher;   // student's teacher
+      } else if (user?.role === "teacher") {
+        courseFilter.createdBy = userId;          // teacher’s own
+      }
+    }
+
+    // Apply filter in query
+    const speechTexts = await SpeechPractice.find(courseFilter)
       .sort({ createdAt: -1 })
       .select('title text courseId createdAt isActive');
+
     res.status(200).json(speechTexts);
   } catch (err) {
     console.error("Fetch speech texts error:", err);

@@ -2,11 +2,15 @@ const mongoose = require('mongoose');
 const Course = require('../models/Course');
 const UserProgress = require('../models/CourseProgress');
 const UserScore = require('../models/UserScore');
+const User = require('../models/User');
+
+const featureFlags = require('../config/featureFlags')
 
 // CREATE course
 exports.createCourse = async (req, res) => {
   try {
     const { title, description, sections } = req.body;
+    console.log(req.user.role)
     const course = new Course({
       title,
       description,
@@ -26,6 +30,8 @@ exports.updateCourse = async (req, res) => {
     const { title, description, sections, isActive } = req.body;
     const courseId = req.params.id;
 
+
+
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ error: "Course not found" });
 
@@ -42,24 +48,43 @@ exports.updateCourse = async (req, res) => {
   }
 };
 
-// GET all courses with progress
 exports.getCourses = async (req, res) => {
   try {
     const userId = req.user.id;
-    const courseFilter = req.user.role === 'admin' ? {} : { isActive: true };
+    const userRole = req.user.role;
+
+    let courseFilter = {};
+
+    let user = await User.findOne({ _id: userId });
+    // Student: only active courses
+    if (user?.role === "student" && featureFlags.teacherCourseRestriction) {
+      courseFilter.isActive = true;
+      courseFilter.createdBy = user?.teacher
+    }
+
+    // Teacher: restrict if feature flag is ON
+    if (userRole === "teacher" && featureFlags.teacherCourseRestriction) {
+      courseFilter.createdBy = userId; // only their own
+    }
+
+    // Admin: no restriction (can see all)
+    // if role === admin → leave courseFilter empty
+
     const courses = await Course.find(courseFilter).sort({ createdAt: -1 });
 
+    // Fetch progress for current user
     const progressData = await UserProgress.find({ userId });
     const progressMap = progressData.reduce((acc, prog) => {
       acc[prog.courseId] = prog;
       return acc;
     }, {});
 
-    const coursesWithProgress = courses.map(course => {
+    const coursesWithProgress = courses.map((course) => {
       const progress = progressMap[course._id];
       const completedCount = progress?.completedSections?.length || 0;
       const totalCount = course.sections?.length || 0;
-      const percentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+      const percentage =
+        totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
       return {
         _id: course._id,
@@ -68,12 +93,13 @@ exports.getCourses = async (req, res) => {
         isActive: course.isActive,
         completedCount,
         totalCount,
-        percentage
+        percentage,
       };
     });
 
     res.status(200).json(coursesWithProgress);
   } catch (err) {
+    console.error("Error in getCourses:", err);
     res.status(500).json({ error: "Failed to fetch courses" });
   }
 };

@@ -47,8 +47,8 @@ exports.register = async (req, res, next) => {
     // 6. Send OTP email
     await sendOTPEmail(email, otp);
 
-    res.status(201).json({ 
-      message: 'OTP sent to your email. Please verify within 10 minutes.' 
+    res.status(201).json({
+      message: 'OTP sent to your email. Please verify within 10 minutes.'
     });
 
   } catch (err) {
@@ -59,6 +59,8 @@ exports.register = async (req, res, next) => {
 // POST /api/auth/verify-otp
 exports.verifyOTP = async (req, res) => {
   const { email, otp } = req.body;
+  console.log("🚀 ~ otp:", otp)
+  console.log("🚀 ~ email:", email)
   const user = await User.findOne({ email });
 
   if (!user) return res.status(404).json({ message: "User not found" });
@@ -75,29 +77,66 @@ exports.verifyOTP = async (req, res) => {
 };
 
 
-// Admin Login
+// Admin, Teacher, Student Login
 exports.login = async (req, res, next) => {
   const { email, password } = req.body;
 
   try {
-    // Check if user is a student
+    // Default: student
     let user = await User.findOne({ email });
-    let role = "student";
+    let role = user?.role;
+
+    // if (!user) {
+    //   // If not found in students, try teacher
+    //   user = await Teacher.findOne({ email });
+    //   role = "teacher";
+    // }
 
     if (!user) {
-      // If not found, try admin
+      // If not found in teachers, try admin
       user = await Admin.findOne({ email });
       role = "admin";
     }
 
-    if (!user) return res.status(400).json({ message: 'User not found' });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
-    else if (user.isActive === false) {
-      return res.status(400).json({ message: 'User is inactive' });
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
     }
 
+    // Password match check
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // Active status check (all roles)
+    if (user.isActive === false) {
+
+
+
+      return res.status(400).json({ message: "User is inactive" });
+    }
+
+    // ✅ Email verification check ONLY for student & teacher
+    if ((role === "student" || role === "teacher") && !user?.emailVerified) {
+      
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+      await User.findOneAndUpdate(
+        { email },  // find by email
+        {
+          otp: otp,
+          otpExpiry: otpExpiry
+        },
+        { upsert: true, new: true } // create if not exists, return updated
+      );
+
+      // 6. Send OTP email
+      await sendOTPEmail(email, otp);
+      return res.status(400).json({ message: "Please verify your email before logging in.", statusCode: 'VRYFYEML' });
+    }
+
+    // JWT token
     const token = jwt.sign(
       { id: user._id, role },
       process.env.JWT_SECRET,
@@ -118,6 +157,7 @@ exports.login = async (req, res, next) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
 
 // Create Course
 exports.createCourse = async (req, res, next) => {

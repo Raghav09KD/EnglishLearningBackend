@@ -7,13 +7,26 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-connectDB();
+app.use("/api", routes);
+
+// Connect DB then start server
+const startServer = async () => {
+  try {
+    await connectDB();
+    console.log("✅ Database connected");
 
 
-app.use('/api', routes);
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error("❌ Database connection failed:", err);
+    process.exit(1); // Exit process if DB connection fails
+  }
+};
 
- app.listen(process.env.PORT || 5000, () =>
-      console.log(`Server running on port ${process.env.PORT || 5000}`)
-    );
+startServer();
+
 
 
