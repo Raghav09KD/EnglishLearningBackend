@@ -10,6 +10,9 @@ router.post("/updateProgress", verifyToken, voiceCourseController.updateProgress
 router.get("/getDetails/:id", verifyToken, voiceCourseController.getCourseDetails);
 router.get("/viewProgress", verifyToken, voiceCourseController.viewProgress);
 
-router.post('/viewProgressForUsr', verifyTecherNAdmin , voiceCourseController.viewProgressForUsr)
+router.post('/viewProgressForUsr', verifyTecherNAdmin, voiceCourseController.viewProgressForUsr);
+
+router.delete("/:id", verifyTecherNAdmin, voiceCourseController.deleteVoiceCourse);
+router.patch("/toggle/:id", verifyTecherNAdmin, voiceCourseController.toggleVoiceCourse);
 
 module.exports = router;

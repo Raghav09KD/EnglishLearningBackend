@@ -70,7 +70,7 @@ exports.getAllCourses = async (req, res) => {
     }
 
     // Fetch courses
-    const courses = await VoiceCourse.find(courseFilter).select("title");
+    const courses = await VoiceCourse.find(courseFilter).select("title isActive");
 
     // Fetch user progress for all these courses
     const courseIds = courses.map(c => c._id);
@@ -85,7 +85,8 @@ exports.getAllCourses = async (req, res) => {
     const result = courses.map(course => ({
       _id: course._id,
       title: course.title,
-      isCompleted: completedCourseIds.has(course._id.toString())
+      isCompleted: completedCourseIds.has(course._id.toString()),
+      isActive : course.isActive
     }));
 
     res.status(200).json(result);
@@ -260,5 +261,41 @@ exports.viewProgressForUsr = async (req, res) => {
   } catch (err) {
     console.error("Error fetching progress:", err);
     res.status(500).json({ error: "Failed to fetch progress data" });
+  }
+};
+
+// ✅ Delete course (Admin only)
+exports.deleteVoiceCourse = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await VoiceCourse.findByIdAndDelete(id);
+    res.status(200).json({ message: "Course deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting course:", err);
+    res.status(500).json({ error: "Failed to delete course" });
+  }
+};
+
+// ✅ Toggle course active/inactive
+exports.toggleVoiceCourse = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const course = await VoiceCourse.findById(id);
+    if (!course) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    course.isActive = !course.isActive;
+    await course.save();
+
+    res.status(200).json({
+      message: `Course ${course.isActive ? "activated" : "deactivated"} successfully`,
+      course,
+    });
+  } catch (err) {
+    console.error("Error updating course:", err);
+    res.status(500).json({ error: "Failed to update course status" });
   }
 };

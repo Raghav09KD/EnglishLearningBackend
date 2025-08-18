@@ -7,10 +7,12 @@ const coursesRoutes = require('./course.routes');
 const speechPracticeRoutes = require('./speech.route');
 const voicePractiseRoututes = require('./voice.route');
 const courseCommentRoutes = require('./courseComment.route');
+const userRoutes = require('./manageUser.route')
 
 router.use('/auth', authRoutes);
 router.use('/admin', adminContentRoutes);
 router.use('/courses', coursesRoutes);
+router.use('/user', userRoutes)
 router.use('/speechPractise', speechPracticeRoutes);
 router.use('/voicePractise', voicePractiseRoututes);
 router.use('/courseComments', courseCommentRoutes);

@@ -13,4 +13,4 @@ router.get('/progress', verifyToken, speechController.getSpeechProgress);
 router.post('/getProgressForUsr', verifyToken, speechController.getSpeechProgressForUsr);
 
 
-module.exports = router;
+module.exports = router;    
