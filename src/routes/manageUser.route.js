@@ -6,4 +6,7 @@ const router = express.Router();
 
 router.patch('/toggle-user', verifyTecherNAdmin, userController.toggleUser);
 
+
+router.get('/getTeacherStudent', verifyTecherNAdmin, userController.getTeacherStudentsWithCourses);
+
 module.exports = router;

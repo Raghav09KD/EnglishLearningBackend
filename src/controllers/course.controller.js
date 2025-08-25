@@ -4,7 +4,8 @@ const UserProgress = require('../models/CourseProgress');
 const UserScore = require('../models/UserScore');
 const User = require('../models/User');
 
-const featureFlags = require('../config/featureFlags')
+const featureFlags = require('../config/featureFlags');
+const CourseAssignment = require('../models/CourseAssignment');
 
 // CREATE course
 exports.createCourse = async (req, res) => {
@@ -54,39 +55,75 @@ exports.getCourses = async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
+    const isManage = req?.query?.manage === 'true';
 
     let courseFilter = {};
-
     let user = await User.findOne({ _id: userId });
-    // Student: only active courses
-    if (user?.role === "student" && featureFlags.teacherCourseRestriction) {
+
+    // Build filter
+    if (userRole === "student" && featureFlags.teacherCourseRestriction) {
       courseFilter = {
         isActive: true,
         $or: [
-          { createdBy: user?.teacher }, // student’s teacher courses
-          { isGlobal: true }            // global courses
+          { createdBy: user?.teacher },
+          { isGlobal: true }
         ]
       };
     }
 
-    // Teacher: restrict if feature flag is ON
     if (userRole === "teacher" && featureFlags.teacherCourseRestriction) {
-      courseFilter.createdBy = userId; // only their own
+      if (isManage) {
+        courseFilter.$or = [
+          { createdBy: userId },
+          { isGlobal: true }
+        ];
+      } else {
+        courseFilter.createdBy = userId;
+      }
     }
 
-    // Admin: no restriction (can see all)
-    // if role === admin → leave courseFilter empty
-
+    // Admin → no restriction
     const courses = await Course.find(courseFilter).sort({ createdAt: -1 });
 
-    // Fetch progress for current user
+    // 🚨 Now apply restriction / assignment rules
+    let finalCourses = [...courses];
+
+    if (userRole === "student") {
+      // Get all restriction docs for this student
+      const restrictions = await CourseAssignment.find({
+        $or: [
+          { studentId: userId },
+          { studentId: null } // global restriction (applied by teacher)
+        ]
+      });
+
+      const restrictedIds = restrictions
+        .filter(r => r.restricted)
+        .map(r => r.courseId.toString());
+
+      // Assigned = only those with restricted=false for this student
+      const assignedIds = restrictions
+        .filter(r => !r.restricted && r.studentId?.toString() === userId.toString())
+        .map(r => r.courseId.toString());
+
+      finalCourses = finalCourses.filter(c => {
+        const cid = c._id.toString();
+        // If assigned explicitly → always allow
+        if (assignedIds.includes(cid)) return true;
+        // Else block if restricted
+        if (restrictedIds.includes(cid)) return false;
+        return true;
+      });
+    }
+
+    // Fetch progress
     const progressData = await UserProgress.find({ userId });
     const progressMap = progressData.reduce((acc, prog) => {
       acc[prog.courseId] = prog;
       return acc;
     }, {});
 
-    const coursesWithProgress = courses.map((course) => {
+    const coursesWithProgress = finalCourses.map(course => {
       const progress = progressMap[course._id];
       const completedCount = progress?.completedSections?.length || 0;
       const totalCount = course.sections?.length || 0;
@@ -96,8 +133,10 @@ exports.getCourses = async (req, res) => {
       return {
         _id: course._id,
         title: course.title,
+        description: course.description,
         createdAt: course.createdAt,
         isActive: course.isActive,
+        isGlobal: course.isGlobal,
         completedCount,
         totalCount,
         percentage,
@@ -108,6 +147,88 @@ exports.getCourses = async (req, res) => {
   } catch (err) {
     console.error("Error in getCourses:", err);
     res.status(500).json({ error: "Failed to fetch courses" });
+  }
+};
+
+// POST /assign-course
+exports.assignCourse = async (req, res) => {
+  try {
+    const { studentId, courseId } = req.body;
+    const teacherId = req.user.id;
+
+    // Verify teacher owns the student
+    const student = await User.findById(studentId);
+    if (!student || student.teacher.toString() !== teacherId) {
+      return res.status(403).json({ error: "You can only assign to your own students" });
+    }
+
+    const existing = await CourseAssignment.findOne({ studentId, courseId });
+    if (existing) {
+      return res.status(400).json({ error: "Course already assigned" });
+    }
+
+    const assignment = new CourseAssignment({
+      studentId,
+      courseId,
+      assignedBy: teacherId
+    });
+
+    await assignment.save();
+    res.status(201).json({ message: "Course assigned successfully", assignment });
+  } catch (err) {
+    console.error("Error assigning course:", err);
+    res.status(500).json({ error: "Failed to assign course" });
+  }
+};
+
+// DELETE /assign-course
+exports.removeAssignment = async (req, res) => {
+  try {
+    const { studentId, courseId } = req.body;
+    await CourseAssignment.deleteOne({ studentId, courseId });
+    res.status(200).json({ message: "Course unassigned successfully" });
+  } catch (err) {
+    console.error("Error removing assignment:", err);
+    res.status(500).json({ error: "Failed to unassign course" });
+  }
+};
+
+// POST /restrict-course
+exports.restrictCourse = async (req, res) => {
+  try {
+    const { courseId, studentId } = req.body; // studentId optional
+    const teacherId = req.user.id;
+
+    const restriction = new CourseAssignment({
+      teacherId,
+      courseId,
+      studentId: studentId || null,
+      restricted: true
+    });
+
+    await restriction.save();
+    res.status(201).json({ message: "Course restricted successfully", restriction });
+  } catch (err) {
+    console.error("Error restricting course:", err);
+    res.status(500).json({ error: "Failed to restrict course" });
+  }
+};
+
+// DELETE /restrict-course
+exports.removeRestriction = async (req, res) => {
+  try {
+    const { courseId, studentId } = req.body;
+    const teacherId = req.user.id;
+
+    const filter = { teacherId, courseId };
+    if (studentId) filter.studentId = studentId;
+    else filter.studentId = null; // teacher-wide restriction
+
+    await CourseAssignment.deleteOne(filter);
+    res.status(200).json({ message: "Restriction removed successfully" });
+  } catch (err) {
+    console.error("Error removing restriction:", err);
+    res.status(500).json({ error: "Failed to remove restriction" });
   }
 };
 
