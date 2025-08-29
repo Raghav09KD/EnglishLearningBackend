@@ -58,45 +58,74 @@ exports.getCourses = async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
+    const isManage = req?.query?.manage === "true";
 
-    let courseFilter = {};
+    let courseFilter = { isActive: true };
+    const user = await User.findById(userId);
 
-    let user = await User.findOne({ _id: userId });
-    // Student: only active courses
-    if (user?.role === "student" && featureFlags.teacherCourseRestriction) {
-      if (!user.teacher) {
-        return res.status(403).json({ error: "No teacher assigned" });
-      }
-
-      const teacher = await User.findById(user.teacher).populate("courses");
-
-      courseFilter = {
-        isActive: true,
-        $or: [
-          { createdBy: user?.teacher }, // student’s teacher courses
-          { _id: { $in: teacher.courses.map(c => c._id) } }  // courses assigned to teacher
-        ]
-      };
-    }
-
-    // Teacher: restrict if feature flag is ON
+    // Teacher logic
     if (userRole === "teacher" && featureFlags.teacherCourseRestriction) {
-      courseFilter.createdBy = userId; // only their own
+      if (isManage) {
+        courseFilter.$or = [
+          { createdBy: userId },
+          { isGlobal: true }
+        ];
+      } else {
+        courseFilter.createdBy = userId;
+      }
     }
 
-    // Admin: no restriction (can see all)
-    // if role === admin → leave courseFilter empty
+    // Admin → no restriction
+    const courses = await Course.find(courseFilter)
+      .populate("createdBy", "role name")
+      .sort({ createdAt: -1 });
 
-    const courses = await Course.find(courseFilter).sort({ createdAt: -1 });
+    let finalCourses = [...courses];
 
-    // Fetch progress for current user
+    // Student filtering
+    if (userRole === "student") {
+      const restrictions = await CourseAssignment.find({
+        $or: [
+          { studentId: userId },
+          { studentId: null } // global restriction
+        ]
+      });
+
+      const restrictedIds = restrictions
+        .filter(r => r.restricted)
+        .map(r => r.courseId.toString());
+
+      const assignedIds = restrictions
+        .filter(r => !r.restricted && r.studentId?.toString() === userId.toString())
+        .map(r => r.courseId.toString());
+
+      finalCourses = finalCourses.filter(c => {
+        const cid = c._id.toString();
+
+        // Always allow explicitly assigned (even admin-created)
+        if (assignedIds.includes(cid)) return true;
+
+        //  Hide if restricted
+        if (restrictedIds.includes(cid)) return false;
+
+        //  Admin-created global course → hide unless assigned
+        if (c.isGlobal && c.createdBy?.role === "admin") return false;
+
+        //  Allow all teacher-created courses
+        if (c.createdBy?.role === "teacher") return true;
+
+        return false;
+      });
+    }
+
+    // Fetch progress
     const progressData = await UserProgress.find({ userId });
     const progressMap = progressData.reduce((acc, prog) => {
       acc[prog.courseId] = prog;
       return acc;
     }, {});
 
-    const coursesWithProgress = courses.map((course) => {
+    const coursesWithProgress = finalCourses.map(course => {
       const progress = progressMap[course._id];
       const completedCount = progress?.completedSections?.length || 0;
       const totalCount = course.sections?.length || 0;
@@ -106,9 +135,15 @@ exports.getCourses = async (req, res) => {
       return {
         _id: course._id,
         title: course.title,
-        level: course.level,
+        description: course.description,
         createdAt: course.createdAt,
         isActive: course.isActive,
+        isGlobal: course.isGlobal,
+        createdBy: {
+          id: course.createdBy?._id,
+          name: course.createdBy?.name,
+          role: course.createdBy?.role,
+        },
         completedCount,
         totalCount,
         percentage,
@@ -121,6 +156,8 @@ exports.getCourses = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch courses" });
   }
 };
+
+
 
 // POST /assign-course
 exports.assignCourse = async (req, res) => {
