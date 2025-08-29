@@ -332,8 +332,6 @@ exports.removeCourse = async (req, res) => {
 };
 
 
-
-
 // GET /admin/fetchAllCourses
 exports.fetchAllCourses = async (req, res) => {
   try {

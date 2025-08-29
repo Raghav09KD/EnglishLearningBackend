@@ -61,7 +61,7 @@ exports.getCourses = async (req, res) => {
     const isManage = req?.query?.manage === "true";
 
     let courseFilter = { isActive: true };
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).populate("teacher"); // populate teacher for students
 
     // Teacher logic
     if (userRole === "teacher" && featureFlags.teacherCourseRestriction) {
@@ -76,7 +76,7 @@ exports.getCourses = async (req, res) => {
     }
 
     // Admin → no restriction
-    const courses = await Course.find(courseFilter)
+    let courses = await Course.find(courseFilter)
       .populate("createdBy", "role name")
       .sort({ createdAt: -1 });
 
@@ -84,6 +84,19 @@ exports.getCourses = async (req, res) => {
 
     // Student filtering
     if (userRole === "student") {
+      //  Get ALL teacher-created and teacher-assigned courses
+      const teachers = await User.find({ role: "teacher" }).populate("courses");
+
+      // Collect all assigned courses from all teachers
+      let teacherAssignedCourses = [];
+      teachers.forEach(t => {
+        teacherAssignedCourses.push(...(t.courses || []));
+      });
+
+      // Deduplicate created + assigned
+      finalCourses = [...finalCourses, ...teacherAssignedCourses];
+
+      // Apply restrictions
       const restrictions = await CourseAssignment.find({
         $or: [
           { studentId: userId },
@@ -99,24 +112,34 @@ exports.getCourses = async (req, res) => {
         .filter(r => !r.restricted && r.studentId?.toString() === userId.toString())
         .map(r => r.courseId.toString());
 
-      finalCourses = finalCourses.filter(c => {
+      // Deduplicate & filter
+      const courseMap = new Map();
+
+      finalCourses.forEach(c => {
         const cid = c._id.toString();
 
-        // Always allow explicitly assigned (even admin-created)
-        if (assignedIds.includes(cid)) return true;
+        // Always allow explicitly assigned
+        if (assignedIds.includes(cid)) {
+          courseMap.set(cid, c);
+          return;
+        }
 
-        //  Hide if restricted
-        if (restrictedIds.includes(cid)) return false;
+        // Block if restricted
+        if (restrictedIds.includes(cid)) return;
 
-        //  Admin-created global course → hide unless assigned
-        if (c.isGlobal && c.createdBy?.role === "admin") return false;
+        // Block global admin-created unless assigned
+        if (c.isGlobal && c.createdBy?.role === "admin") return;
 
-        //  Allow all teacher-created courses
-        if (c.createdBy?.role === "teacher") return true;
-
-        return false;
+        //  Allow ALL teacher-created and ALL teacher-assigned courses
+        if (c.createdBy?.role === "teacher" || teacherAssignedCourses.find(tc => tc._id.toString() === cid)) {
+          courseMap.set(cid, c);
+          return;
+        }
       });
+
+      finalCourses = Array.from(courseMap.values());
     }
+
 
     // Fetch progress
     const progressData = await UserProgress.find({ userId });
@@ -136,6 +159,7 @@ exports.getCourses = async (req, res) => {
         _id: course._id,
         title: course.title,
         description: course.description,
+        level: course.level, 
         createdAt: course.createdAt,
         isActive: course.isActive,
         isGlobal: course.isGlobal,
@@ -156,6 +180,7 @@ exports.getCourses = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch courses" });
   }
 };
+
 
 
 
