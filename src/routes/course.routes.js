@@ -1,0 +1,18 @@
+const express = require('express');
+const router = express.Router();
+const { verifyAdmin, verifyToken, verifyTecherNAdmin } = require('../middleware/authMiddleware');
+const courseController = require('../controllers/course.controller');
+
+router.post('/create', verifyTecherNAdmin, courseController.createCourse);
+router.put('/update/:id', verifyTecherNAdmin, courseController.updateCourse);
+router.get('/getCources', verifyToken, courseController.getCourses);
+router.post('/restrict-course', verifyTecherNAdmin, courseController.restrictCourse);
+router.post('/removeRestrict-course', verifyTecherNAdmin, courseController.removeRestriction);
+router.get('/getCourse/:id', verifyToken, courseController.getCourseById);
+router.get('/getCourse/:courseId/sections-titles', verifyToken, courseController.getSectionTitles);
+router.get('/getCourse/:courseId/section/:sectionIndex', verifyToken, courseController.getSectionByIndex);
+router.post('/updateProgress', verifyToken, courseController.updateProgress);
+
+
+
+module.exports = router;
