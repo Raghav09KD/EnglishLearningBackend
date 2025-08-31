@@ -331,7 +331,6 @@ exports.removeCourse = async (req, res) => {
   }
 };
 
-
 // GET /admin/fetchAllCourses
 exports.fetchAllCourses = async (req, res) => {
   try {
@@ -342,6 +341,37 @@ exports.fetchAllCourses = async (req, res) => {
     if (currentUser.role === "admin") {
       // Admin sees all courses
       courses = await Course.find({});
+    } else if (currentUser.role === "teacher") {
+      // Teacher sees only assigned courses
+      const teacher = await User.findById(currentUser.id).populate("courses");
+
+      if (!teacher) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+
+      courses = teacher.courses;  // Teacher sees only their assigned courses
+    } else {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    res.json(courses);
+  } catch (err) {
+    console.error("Error fetching courses:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
+// GET /admin/fetchAllCourses
+exports.fetchAllGlobalCourses = async (req, res) => {
+  try {
+    const currentUser = req.user; // set by auth middleware
+
+    let courses;
+
+    if (currentUser.role === "admin") {
+      // Admin sees all courses
+      courses = await Course.find({ isGlobal: true});
     } else if (currentUser.role === "teacher") {
       // Teacher sees only assigned courses
       const teacher = await User.findById(currentUser.id).populate("courses");

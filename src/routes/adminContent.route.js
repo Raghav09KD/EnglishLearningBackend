@@ -14,6 +14,9 @@ router.put('/:id', verifyToken, verifyAdmin, adminContentController.updateCourse
 
 // Courses
  router.get('/fetchAllCourses', verifyTecherNAdmin, adminContentController.fetchAllCourses);
+
+ router.get('/fetchAllGlobalCourses', verifyTecherNAdmin, adminContentController.fetchAllGlobalCourses);
+
  router.post('/assignCourses', verifyAdmin, adminContentController.assignCourses);
  router.post('/removeCourse', verifyAdmin, adminContentController.removeCourse);
 
