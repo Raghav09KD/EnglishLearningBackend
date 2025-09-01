@@ -1,5 +1,7 @@
 const { default: mongoose } = require("mongoose");
 const User = require("../models/User");
+const Course = require("../models/Course");
+const teacherCourseRestriction = require('../models/CourseAssignment');
 
 exports.toggleUser = async (req, res) => {
     const { userId } = req.body;
@@ -55,7 +57,7 @@ exports.getTeacherStudentsWithCourses = async (req, res) => {
         }).select("title description isGlobal createdBy isActive createdAt");
 
         // fetch restrictions for all students
-        const restrictions = await CourseRestriction.find({
+        const restrictions = await teacherCourseRestriction.find({
             teacherId,
             studentId: { $in: studentIds },
         }).populate("courseId", "title description isGlobal isActive createdAt");

@@ -61,6 +61,34 @@ exports.getAllSpeechPractices = async (req, res) => {
   }
 };
 
+
+exports.getAllGlobalSpeechPractices = async (req, res) => {
+  try {
+    const userId = req.user.id; // define this for later use
+    const user = await User.findById(userId);
+
+    let courseFilter = {};
+
+    courseFilter = {
+      isActive: true,
+      $or: [
+
+        { isGlobal: true }            // global courses
+      ]
+    };
+
+    // Apply filter in query
+    const speechTexts = await SpeechPractice.find(courseFilter)
+      .sort({ createdAt: -1 })
+      .select('title text courseId createdAt isActive createdBy');
+
+    res.status(200).json(speechTexts);
+  } catch (err) {
+    console.error("Fetch speech texts error:", err);
+    res.status(500).json({ error: 'Failed to fetch speech practices' });
+  }
+};
+
 exports.scoreSpeech = async (req, res) => {
   try {
     const { id, expectedText, spokenText } = req.body;
@@ -173,7 +201,7 @@ exports.getSpeechProgressForUsr = async (req, res) => {
 
   try {
     let filter = { userId: userId };
-  
+
 
     const scores = await SpeechScore.find(filter)
       .populate('userId', 'name email')

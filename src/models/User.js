@@ -16,7 +16,9 @@ const userSchema = new mongoose.Schema({
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
   courses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
-  
+  voiceCourses: [{ type: mongoose.Schema.Types.ObjectId, ref: "VoiceCourse" }],
+  speechCourses: [{ type: mongoose.Schema.Types.ObjectId, ref: "SpeechPractice" }],
+
   // For Teachers: which students they have (optional but helpful for queries)
   students: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 }, { timestamps: true });

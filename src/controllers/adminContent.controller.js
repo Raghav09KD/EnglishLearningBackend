@@ -4,6 +4,8 @@ const UserScore = require('../models/UserScore');
 const User = require('../models/User');
 const VoiceProgress = require('../models/VoiceProgress');
 const SpeechScore = require('../models/SpeechScore');
+const VoiceCourse = require('../models/VoiceCourse');
+const SpeechCourse = require('../models/SpeechPractise');
 
 // GET progress
 exports.getProgress = async (req, res) => {
@@ -96,21 +98,32 @@ exports.updateCourse = async (req, res) => {
 exports.fetchAll = async (req, res) => {
   try {
     const currentUser = req.user; // set by auth middleware
-    console.log(currentUser)
     let users;
 
     if (currentUser.role === "admin") {
-      // Admin -> fetch all users
-      users = await User.find({}, "-password");
+      // Admin -> fetch all users with courses populated
+      users = await User.find({}, "-password")
+        .populate("courses")
+        .populate("voiceCourses")
+        .populate("speechCourses");
     } else if (currentUser.role === "teacher") {
-      // Teacher -> fetch only their students
-      const teacher = await User.findById(currentUser.id).populate("students", "-password");
+      // Teacher -> fetch only their students with courses populated
+      const teacher = await User.findById(currentUser.id)
+        .populate({
+          path: "students",
+          select: "-password",
+          populate: [
+            { path: "courses" },
+            { path: "voiceCourses" },
+            { path: "speechCourses" },
+          ],
+        });
 
       if (!teacher) {
         return res.status(404).json({ error: "Teacher not found" });
       }
 
-      users = teacher.students; // already populated
+      users = teacher.students; // already populated with courses
     } else {
       return res.status(403).json({ error: "Not authorized" });
     }
@@ -121,6 +134,7 @@ exports.fetchAll = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 exports.generatePerformance = async (req, res) => {
   try {
@@ -265,61 +279,140 @@ exports.removeStudent = async (req, res) => {
 // Teacher-course 
 
 // POST /admin/assign-courses
+// POST /admin/assign-courses
 exports.assignCourses = async (req, res) => {
-  const { courseIds, teacherId } = req.body;
+  const { courseIds, teacherId, courseType = "courses" } = req.body;
 
   try {
     const teacher = await User.findById(teacherId);
 
     if (!teacher || teacher.role !== "teacher") {
-      return res.status(404).json({ message: "Teacher not found or invalid role" });
+      return res
+        .status(404)
+        .json({ message: "Teacher not found or invalid role" });
     }
 
-        // Check if teacher already has 10 courses assigned
-    if (teacher.courses && teacher.courses.length >= 10) {
-      return res.status(400).json({ message: "This teacher already has the maximum number of courses assigned (10)" });
+    // validate IDs against correct model
+    let courses;
+    switch (courseType) {
+      case "courses":
+        courses = await Course.find({ _id: { $in: courseIds } });
+        if (courses.length !== courseIds.length) {
+          return res
+            .status(400)
+            .json({ message: "Some normal courses are invalid" });
+        }
+        // limit check
+        if (teacher.courses && teacher.courses.length + courseIds.length > 10) {
+          return res.status(400).json({
+            message:
+              "This teacher already has the maximum number of courses assigned (10)",
+          });
+        }
+        teacher.courses = [...(teacher.courses || []), ...courseIds];
+        break;
+
+      case "voiceCourses":
+        courses = await VoiceCourse.find({ _id: { $in: courseIds } });
+        if (courses.length !== courseIds.length) {
+          return res
+            .status(400)
+            .json({ message: "Some voice courses are invalid" });
+        }
+        if (
+          teacher.voiceCourses &&
+          teacher.voiceCourses.length + courseIds.length > 10
+        ) {
+          return res.status(400).json({
+            message:
+              "This teacher already has the maximum number of voice courses assigned (10)",
+          });
+        }
+        teacher.voiceCourses = [...(teacher.voiceCourses || []), ...courseIds];
+        break;
+
+      case "speechCourses":
+        courses = await SpeechCourse.find({ _id: { $in: courseIds } });
+        if (courses.length !== courseIds.length) {
+          return res
+            .status(400)
+            .json({ message: "Some speech courses are invalid" });
+        }
+        if (
+          teacher.speechCourses &&
+          teacher.speechCourses.length + courseIds.length > 10
+        ) {
+          return res.status(400).json({
+            message:
+              "This teacher already has the maximum number of speech courses assigned (10)",
+          });
+        }
+        teacher.speechCourses = [
+          ...(teacher.speechCourses || []),
+          ...courseIds,
+        ];
+        break;
+
+      default:
+        return res.status(400).json({ message: "Invalid course type" });
     }
 
-    // Validate given courses
-    const courses = await Course.find({ _id: { $in: courseIds } });
-    if (courses.length !== courseIds.length) {
-      return res.status(400).json({ message: "Some courses are invalid" });
-    }
-
-    // Replace teacher.courses with new set
-    teacher.courses = courseIds;
     await teacher.save();
 
-    res.json({ message: "Courses assigned successfully", teacher });
+    res.json({
+      message: `${courseType} assigned successfully`,
+      teacher,
+    });
   } catch (err) {
     console.error("Assign courses error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+
 // POST /admin/remove-course
 exports.removeCourse = async (req, res) => {
-  const { teacherId, courseId } = req.body;
+  const { teacherId, courseId, courseType } = req.body;
 
   try {
-    const teacher = await User.findById(teacherId).populate("courses");
+    const teacher = await User.findById(teacherId)
+      .populate("courses")
+      .populate("voiceCourses")
+      .populate("speechCourses");
 
     if (!teacher || teacher.role !== "teacher") {
       return res.status(404).json({ message: "Teacher not found or invalid role" });
     }
 
+    // Determine which field to update
+    let field;
+    switch (courseType) {
+      case "courses":
+        field = "courses";
+        break;
+      case "voiceCourses":
+        field = "voiceCourses";
+        break;
+      case "speechCourses":
+        field = "speechCourses";
+        break;
+      default:
+        return res.status(400).json({ message: "Invalid courseType" });
+    }
 
-
-    // Normalize courses whether they are ObjectIds or populated objects
-    teacher.courses = teacher.courses.filter((c) => {
+    // Remove the course from the selected field
+    teacher[field] = teacher[field].filter((c) => {
       const cid = c._id ? c._id.toString() : c.toString();
       return cid !== courseId.toString();
     });
 
     await teacher.save();
 
-    // Return updated teacher with populated courses
-    const updatedTeacher = await User.findById(teacherId).populate("courses");
+    // Return updated teacher with populated data
+    const updatedTeacher = await User.findById(teacherId)
+      .populate("courses")
+      .populate("voiceCourses")
+      .populate("speechCourses");
 
     res.json({
       message: "Course removed successfully",
@@ -330,6 +423,7 @@ exports.removeCourse = async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
+
 
 // GET /admin/fetchAllCourses
 exports.fetchAllCourses = async (req, res) => {
@@ -371,7 +465,7 @@ exports.fetchAllGlobalCourses = async (req, res) => {
 
     if (currentUser.role === "admin") {
       // Admin sees all courses
-      courses = await Course.find({ isGlobal: true});
+      courses = await Course.find({ isGlobal: true });
     } else if (currentUser.role === "teacher") {
       // Teacher sees only assigned courses
       const teacher = await User.findById(currentUser.id).populate("courses");

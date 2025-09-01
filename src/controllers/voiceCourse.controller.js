@@ -86,7 +86,35 @@ exports.getAllCourses = async (req, res) => {
       _id: course._id,
       title: course.title,
       isCompleted: completedCourseIds.has(course._id.toString()),
-      isActive : course.isActive
+      isActive: course.isActive
+    }));
+
+    res.status(200).json(result);
+  } catch (err) {
+    console.error("Error fetching voice courses:", err);
+    res.status(500).json({ error: "Failed to fetch voice courses" });
+  }
+};
+
+// Get all voice courses
+exports.getAllGlobalCourses = async (req, res) => {
+  try {
+    let courseFilter = {
+      isActive: true,
+      $or: [
+        { isGlobal: true }            // global courses
+      ]
+    };
+
+    // Fetch courses
+    const courses = await VoiceCourse.find(courseFilter).select("title isActive createdBy");
+
+    // Attach completion flag
+    const result = courses.map(course => ({
+      _id: course._id,
+      title: course.title,
+      description: '',
+      isActive: course.isActive
     }));
 
     res.status(200).json(result);

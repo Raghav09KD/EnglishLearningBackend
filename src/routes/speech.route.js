@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.post('/create', verifyTecherNAdmin, speechController.createSpeechPractice);
 router.get('/all', verifyToken, speechController.getAllSpeechPractices);
+router.get('/fetchAllGlobal', verifyTecherNAdmin, speechController.getAllGlobalSpeechPractices);
 router.post('/score', verifyToken, speechController.scoreSpeech);
 router.patch('/toggleSpeech', verifyTecherNAdmin, speechController.toggleSpeech);
 router.put('/update', verifyTecherNAdmin, speechController.updateSpeechPractice);
