@@ -24,42 +24,65 @@ exports.createSpeechPractice = async (req, res) => {
 
 exports.getAllSpeechPractices = async (req, res) => {
   try {
-    const userId = req.user.id; // define this for later use
-    const user = await User.findById(userId);
+    const userId = req.user.id;
+    const user = await User.findById(userId)
+      .populate("speechCourses"); // ✅ include assigned speech courses
 
     let courseFilter = {};
 
-    // Students always only see active speech practices
+    // ---------------- Student logic ----------------
     if (user?.role === "student") {
       courseFilter.isActive = true;
-    }
 
-    // Feature flag restricts ownership
-    if (featureFlags.teacherCourseRestriction) {
-      if (user?.role === "student") {
+      if (featureFlags.teacherCourseRestriction) {
         courseFilter = {
           isActive: true,
           $or: [
-            { createdBy: user?.teacher }, // student’s teacher courses
+            { createdBy: user?.teacher }, // student’s teacher-created
             { isGlobal: true }            // global courses
           ]
-        };   // student's teacher
-      } else if (user?.role === "teacher") {
-        courseFilter.createdBy = userId;          // teacher’s own
+        };
       }
     }
 
-    // Apply filter in query
-    const speechTexts = await SpeechPractice.find(courseFilter)
-      .sort({ createdAt: -1 })
-      .select('title text courseId createdAt isActive');
+    // ---------------- Teacher logic ----------------
+    if (user?.role === "teacher") {
+      if (featureFlags.teacherCourseRestriction) {
+        courseFilter.createdBy = userId; // teacher’s own courses
+      }
 
-    res.status(200).json(speechTexts);
+      // Fetch teacher's own speech practices
+      let teacherSpeech = await SpeechPractice.find(courseFilter)
+        .sort({ createdAt: -1 })
+        .select("title text courseId createdAt isActive");
+
+      // Merge in admin-assigned speech courses
+      if (user.speechCourses?.length) {
+        const speechMap = new Map(teacherSpeech.map(s => [s._id.toString(), s]));
+        user.speechCourses.forEach(sc => {
+          speechMap.set(sc._id.toString(), sc);
+        });
+        teacherSpeech = Array.from(speechMap.values());
+      }
+
+      return res.status(200).json(teacherSpeech);
+    }
+
+    // ---------------- Admin logic ----------------
+    if (user?.role === "admin") {
+      const allSpeech = await SpeechPractice.find(courseFilter)
+        .sort({ createdAt: -1 })
+        .select("title text courseId createdAt isActive");
+      return res.status(200).json(allSpeech);
+    }
+
+    return res.status(403).json({ error: "Invalid role" });
   } catch (err) {
     console.error("Fetch speech texts error:", err);
-    res.status(500).json({ error: 'Failed to fetch speech practices' });
+    res.status(500).json({ error: "Failed to fetch speech practices" });
   }
 };
+
 
 
 exports.getAllGlobalSpeechPractices = async (req, res) => {

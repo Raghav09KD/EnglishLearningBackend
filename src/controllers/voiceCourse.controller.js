@@ -40,39 +40,73 @@ exports.createCourse = async (req, res) => {
 exports.getAllCourses = async (req, res) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId);
+    const user = await User.findById(userId)
+      .populate("voiceCourses"); // ✅ populate admin-assigned voice courses
 
     let courseFilter = {};
 
-    // Students see only active
+    // ---------------- Student logic ----------------
     if (user?.role === "student") {
       courseFilter.isActive = true;
-    }
 
-    // Feature flag restrictions
-    if (featureFlags.teacherCourseRestriction) {
-      if (user?.role === "student") {
+      if (featureFlags.teacherCourseRestriction) {
         courseFilter = {
           isActive: true,
           $or: [
-            { createdBy: user?.teacher }, // student’s teacher courses
-            { isGlobal: true }            // global courses
+            { createdBy: user?.teacher }, // student’s teacher-created
+            { isGlobal: true }            // global voice courses
           ]
         };
-      } else if (user?.role === "teacher") {
-        courseFilter.createdBy = userId;
       }
     }
 
-    // Admin sees all
-    if (req.user.role === "admin") {
-      courseFilter = {};
+    // ---------------- Teacher logic ----------------
+    if (user?.role === "teacher") {
+      if (featureFlags.teacherCourseRestriction) {
+        courseFilter.createdBy = userId;
+      }
+
+      // Fetch teacher's own created voice courses
+      let teacherCourses = await VoiceCourse.find(courseFilter)
+        .select("title isActive");
+
+      // Merge in admin-assigned voice courses
+      if (user.voiceCourses?.length) {
+        const courseMap = new Map(teacherCourses.map(c => [c._id.toString(), c]));
+        user.voiceCourses.forEach(vc => {
+          courseMap.set(vc._id.toString(), vc);
+        });
+        teacherCourses = Array.from(courseMap.values());
+      }
+
+      // Progress check for teacher
+      const courseIds = teacherCourses.map(c => c._id);
+      const progress = await UserVoiceCourseProgress.find({
+        userId,
+        courseId: { $in: courseIds }
+      }).select("courseId");
+
+      const completedCourseIds = new Set(progress.map(p => p.courseId.toString()));
+
+      const result = teacherCourses.map(course => ({
+        _id: course._id,
+        title: course.title,
+        isCompleted: completedCourseIds.has(course._id.toString()),
+        isActive: course.isActive
+      }));
+
+      return res.status(200).json(result);
     }
 
-    // Fetch courses
+    // ---------------- Admin logic ----------------
+    if (user?.role === "admin") {
+      courseFilter = {}; // no restrictions
+    }
+
+    // ---------------- Default fetch (students/admin) ----------------
     const courses = await VoiceCourse.find(courseFilter).select("title isActive");
 
-    // Fetch user progress for all these courses
+    // Progress check
     const courseIds = courses.map(c => c._id);
     const progress = await UserVoiceCourseProgress.find({
       userId,
@@ -81,7 +115,6 @@ exports.getAllCourses = async (req, res) => {
 
     const completedCourseIds = new Set(progress.map(p => p.courseId.toString()));
 
-    // Attach completion flag
     const result = courses.map(course => ({
       _id: course._id,
       title: course.title,
@@ -89,12 +122,13 @@ exports.getAllCourses = async (req, res) => {
       isActive: course.isActive
     }));
 
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (err) {
     console.error("Error fetching voice courses:", err);
     res.status(500).json({ error: "Failed to fetch voice courses" });
   }
 };
+
 
 // Get all voice courses
 exports.getAllGlobalCourses = async (req, res) => {
