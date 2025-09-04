@@ -37,22 +37,23 @@ exports.getAllSpeechPractices = async (req, res) => {
     if (user?.role === "student") {
       courseFilter.isActive = true;
 
-      if (featureFlags.teacherCourseRestriction) {
-        courseFilter = {
-          isActive: true,
-          isGlobal: false,
-          $or: [
-            // { createdBy: user?.teacher },
-            { isGlobal: true }
-          ]
-        };
-      }
+      // 1. Get the student's teacher
+      let teacher = user.teacher
+        ? await User.findById(user.teacher).populate("speechCourses")
+        : null;
 
-      const studentSpeech = await SpeechPractice.find(courseFilter)
+      // 2. Build query
+      let studentSpeech = await SpeechPractice.find({
+        isActive: true,
+        $or: [
+          { isGlobal: false }, // all non-global
+          { _id: { $in: teacher?.speechCourses || [] } } // only teacher-assigned global
+        ]
+      })
         .sort({ createdAt: -1 })
-        .select("title text courseId createdAt isActive");
+        .select("title text courseId createdAt isActive isGlobal");
 
-      return res.status(200).json(studentSpeech); // ✅ RETURN here
+      return res.status(200).json(studentSpeech);
     }
 
     // ---------------- Teacher logic ----------------
