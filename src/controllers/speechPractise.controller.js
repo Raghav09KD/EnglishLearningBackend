@@ -3,7 +3,8 @@ const SpeechScore = require('../models/SpeechScore');
 const User = require('../models/User');
 const { calculatePronunciationScore } = require('../utils/utils');
 const mongoose = require('mongoose');
-const featureFlags = require('../config/featureFlags')
+const featureFlags = require('../config/featureFlags');
+const Admin = require('../models/Admin');
 
 exports.createSpeechPractice = async (req, res) => {
   try {
@@ -25,9 +26,10 @@ exports.createSpeechPractice = async (req, res) => {
 exports.getAllSpeechPractices = async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log("User ID:", req.user); // Debug log
     const user = await User.findById(userId)
       .populate("speechCourses"); // ✅ include assigned speech courses
-
+    console.log("user ====>", user)
     let courseFilter = {};
 
     // ---------------- Student logic ----------------
@@ -37,26 +39,31 @@ exports.getAllSpeechPractices = async (req, res) => {
       if (featureFlags.teacherCourseRestriction) {
         courseFilter = {
           isActive: true,
+          isGlobal: false,
           $or: [
-            { createdBy: user?.teacher }, // student’s teacher-created
-            { isGlobal: true }            // global courses
+            // { createdBy: user?.teacher },
+            { isGlobal: true }
           ]
         };
       }
+
+      const studentSpeech = await SpeechPractice.find(courseFilter)
+        .sort({ createdAt: -1 })
+        .select("title text courseId createdAt isActive");
+
+      return res.status(200).json(studentSpeech); // ✅ RETURN here
     }
 
     // ---------------- Teacher logic ----------------
-    if (user?.role === "teacher") {
+    else if (user?.role === "teacher") {
       if (featureFlags.teacherCourseRestriction) {
-        courseFilter.createdBy = userId; // teacher’s own courses
+        courseFilter.createdBy = userId;
       }
 
-      // Fetch teacher's own speech practices
       let teacherSpeech = await SpeechPractice.find(courseFilter)
         .sort({ createdAt: -1 })
         .select("title text courseId createdAt isActive");
 
-      // Merge in admin-assigned speech courses
       if (user.speechCourses?.length) {
         const speechMap = new Map(teacherSpeech.map(s => [s._id.toString(), s]));
         user.speechCourses.forEach(sc => {
@@ -65,17 +72,25 @@ exports.getAllSpeechPractices = async (req, res) => {
         teacherSpeech = Array.from(speechMap.values());
       }
 
-      return res.status(200).json(teacherSpeech);
+      return res.status(200).json(teacherSpeech); // ✅ RETURN here
     }
 
     // ---------------- Admin logic ----------------
-    if (user?.role === "admin") {
-      const allSpeech = await SpeechPractice.find(courseFilter)
-        .sort({ createdAt: -1 })
-        .select("title text courseId createdAt isActive");
-      return res.status(200).json(allSpeech);
+    else if (!user) {
+
+      const user = await Admin.findById(userId)
+      if (user) {
+        const allSpeech = await SpeechPractice.find(courseFilter)
+          .sort({ createdAt: -1 })
+          .select("title text courseId createdAt isActive");
+        return res.status(200).json(allSpeech); // ✅ RETURN here
+      }else{
+        return res.status(403).json({ error: "Invalid role" });
+      }
+
     }
 
+    // ---------------- Fallback ----------------
     return res.status(403).json({ error: "Invalid role" });
   } catch (err) {
     console.error("Fetch speech texts error:", err);
