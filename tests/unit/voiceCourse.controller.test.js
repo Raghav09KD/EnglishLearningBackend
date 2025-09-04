@@ -1,20 +1,20 @@
-const voiceController = require("../controllers/voiceCourse.controller");
-const VoiceCourse = require("../models/VoiceCourse");
-const User = require("../models/User");
-const UserVoiceCourseProgress = require("../models/VoiceProgress");
-
+jest.mock("../src/models/User");
 jest.mock("../models/VoiceCourse");
-jest.mock("../models/User");
 jest.mock("../models/VoiceProgress");
+
+const voiceController = require("../../src/controllers/voiceCourse.controller");
+const VoiceCourse = require("../../src/models/VoiceCourse");
+const User = require("../../src/models/User");
+const UserVoiceCourseProgress = require("../../src/models/VoiceProgress");
 
 describe("voiceCourse.controller", () => {
   it("getAllCourses returns list", async () => {
     const req = { user: { id: "u1", role: "admin" } };
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
 
-    // Mock User.findById with populate
+    // Mock User.findById
     User.findById.mockReturnValue({
-      populate: jest.fn().mockResolvedValue({ role: "admin", voiceCourses: [] }),
+      populate: jest.fn().mockResolvedValue({ _id: "u1", role: "admin", voiceCourses: [] }),
     });
 
     // Mock VoiceCourse.find chain

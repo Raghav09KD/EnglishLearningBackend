@@ -16,4 +16,10 @@ router.post('/viewProgressForUsr', verifyTecherNAdmin, voiceCourseController.vie
 router.delete("/:id", verifyTecherNAdmin, voiceCourseController.deleteVoiceCourse);
 router.patch("/toggle/:id", verifyTecherNAdmin, voiceCourseController.toggleVoiceCourse);
 
+router.get("/", async (req, res) => {
+  const VoiceCourse = require("../models/VoiceCourse");
+  const courses = await VoiceCourse.find();
+  res.json(courses);
+});
+
 module.exports = router;

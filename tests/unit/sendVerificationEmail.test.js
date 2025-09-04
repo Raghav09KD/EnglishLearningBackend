@@ -1,6 +1,6 @@
 jest.mock("nodemailer");
 const nodemailer = require("nodemailer");
-const sendVerificationEmail = require("../utils/sendVerificationEmail");
+const sendVerificationEmail = require("../../src/utils/sendVerificationEmail");
 
 describe("sendVerificationEmail", () => {
     it("sends email with OTP", async () => {

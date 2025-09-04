@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const { verifyToken, verifyAdmin } = require("../middleware/authMiddleware");
+const { verifyToken, verifyAdmin } = require("../../src/middleware/authMiddleware");
 
 describe("authMiddleware", () => {
   it("rejects if no token", () => {

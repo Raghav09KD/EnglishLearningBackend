@@ -13,5 +13,10 @@ router.put('/update', verifyTecherNAdmin, speechController.updateSpeechPractice)
 router.get('/progress', verifyToken, speechController.getSpeechProgress);
 router.post('/getProgressForUsr', verifyTecherNAdmin, speechController.getSpeechProgressForUsr);
 
+router.get("/", async (req, res) => {
+  const Speech = require("../models/SpeechPractise");
+  const speeches = await Speech.find();
+  res.json(speeches);
+});
 
 module.exports = router;    

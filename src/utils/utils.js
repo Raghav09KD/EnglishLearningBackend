@@ -1,6 +1,8 @@
-import { diffWords } from 'diff';
+// import { diffWords } from 'diff';
+const { diffWords } = require('diff');
 
-export function calculatePronunciationScore(expectedText, spokenText) {
+
+function calculatePronunciationScore(expectedText, spokenText) {
   const clean = (str) =>
     str.toLowerCase().replace(/[^\w\s]/g, '').trim();
 
@@ -69,3 +71,5 @@ function calculateMedal(quizScores = [], speechScores = []) {
   if (avgScore >= 50) return 'bronze';
   return 'none';
 }
+
+module.exports = { calculatePronunciationScore };
