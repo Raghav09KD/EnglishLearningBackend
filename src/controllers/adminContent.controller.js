@@ -101,29 +101,37 @@ exports.fetchAll = async (req, res) => {
     let users;
 
     if (currentUser.role === "admin") {
-      // Admin -> fetch all users with courses populated
-      users = await User.find({}, "-password")
-        .populate("courses")
-        .populate("voiceCourses")
-        .populate("speechCourses");
+      // Admin -> fetch all users
+      users = await User.find({}, "-password");
     } else if (currentUser.role === "teacher") {
-      // Teacher -> fetch only their students with courses populated
-      const teacher = await User.findById(currentUser.id)
-        .populate({
-          path: "students",
-          select: "-password",
-          populate: [
-            { path: "courses" },
-            { path: "voiceCourses" },
-            { path: "speechCourses" },
-          ],
-        });
+      // Teacher -> fetch students who engaged with teacher's courses
 
-      if (!teacher) {
-        return res.status(404).json({ error: "Teacher not found" });
-      }
+      // 1. Get teacher's created courses
+      const teacherCourses = await Course.find({ createdBy: currentUser.id }).select("_id");
+      const teacherVoiceCourses = await VoiceCourse.find({ createdBy: currentUser.id }).select("_id");
 
-      users = teacher.students; // already populated with courses
+      const courseIds = teacherCourses.map(c => c._id);
+      const voiceCourseIds = teacherVoiceCourses.map(vc => vc._id);
+
+      // 2. Find progress for normal + voice courses
+      const courseProgress = await UserProgress.find({ courseId: { $in: courseIds } }).select("userId");
+      const voiceCourseProgress = await VoiceProgress.find({ courseId: { $in: voiceCourseIds } }).select("userId");
+
+      // 3. Find speech progress (if linked to courseId)
+      const speechProgress = await SpeechScore.find({ courseId: { $in: courseIds } }).select("userId");
+
+      // 4. Collect unique userIds
+      const userIds = [
+        ...new Set([
+          ...courseProgress.map(p => p.userId.toString()),
+          ...voiceCourseProgress.map(p => p.userId.toString()),
+          ...speechProgress.map(p => p.userId.toString())
+        ])
+      ];
+
+      // 5. Fetch user details
+      users = await User.find({ _id: { $in: userIds } }, "-password");
+
     } else {
       return res.status(403).json({ error: "Not authorized" });
     }
@@ -134,7 +142,6 @@ exports.fetchAll = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
-
 
 exports.generatePerformance = async (req, res) => {
   try {
